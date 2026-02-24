@@ -16,8 +16,12 @@
     <AppContainerApplication>false</AppContainerApplication>
     <ApplicationType>Windows Store</ApplicationType>
     <ApplicationTypeRevision>10.0</ApplicationTypeRevision>
+    <TargetPlatformIdentifier Condition="'$(TargetPlatformIdentifier)' == ''">UAP</TargetPlatformIdentifier>
     <WindowsTargetPlatformVersion Condition="'$(WindowsTargetPlatformVersion)' == ''">10.0.26100.0</WindowsTargetPlatformVersion>
     <WindowsTargetPlatformMinVersion>10.0.26100.0</WindowsTargetPlatformMinVersion>
+    <!-- VS 2026 + CppWinRT may resolve TargetPlatformVersion to 7.0 for unpackaged desktop WinUI projects. -->
+    <TargetPlatformVersion Condition="'$(TargetPlatformVersion)' == '' or '$(TargetPlatformVersion)' == '7.0'">$(WindowsTargetPlatformVersion)</TargetPlatformVersion>
+    <TargetPlatformMinVersion Condition="'$(TargetPlatformMinVersion)' == '' or '$(TargetPlatformMinVersion)' == '7.0'">$(WindowsTargetPlatformMinVersion)</TargetPlatformMinVersion>
     <IntDir>$(SolutionDir)\obj\$(Platform)\$(Configuration)\$(MSBuildProjectName)\</IntDir>
     <OutDir>$(SolutionDir)\bin\$(Platform)\$(Configuration)\</OutDir>
     <GeneratedFilesDir>$(IntDir)\Generated Files\</GeneratedFilesDir>
@@ -38,8 +42,8 @@
   <Import Project="..\Common.Pre.props" />
   <PropertyGroup Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
-    <PlatformToolset Condition="$(VS17)">v143</PlatformToolset>
-    <PlatformToolset Condition="!$(VS17)">v145</PlatformToolset>
+    <PlatformToolset Condition="Exists('$(VCTargetsPath)Application Type\Windows Store\10.0\Platforms\$(Platform)\PlatformToolsets\v145\Toolset.props')">v145</PlatformToolset>
+    <PlatformToolset Condition="'$(PlatformToolset)' == ''">v143</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
@@ -184,6 +188,8 @@
     <ClInclude Include="JsonHelper.h" />
     <ClInclude Include="LocalizationService.h" />
     <ClInclude Include="ScalingService.h" />
+    <ClInclude Include="PreviewSession.h" />
+    <ClInclude Include="ScalingPreviewService.h" />
     <ClInclude Include="NewProfileViewModel.h">
       <DependentUpon>NewProfileViewModel.idl</DependentUpon>
       <SubType>Code</SubType>
@@ -377,6 +383,8 @@
     <ClCompile Include="JsonHelper.cpp" />
     <ClCompile Include="LocalizationService.cpp" />
     <ClCompile Include="ScalingService.cpp" />
+    <ClCompile Include="PreviewSession.cpp" />
+    <ClCompile Include="ScalingPreviewService.cpp" />
     <ClCompile Include="NewProfileViewModel.cpp">
       <DependentUpon>NewProfileViewModel.idl</DependentUpon>
       <SubType>Code</SubType>
@@ -719,13 +727,19 @@
     </Image>
   </ItemGroup>
   <ItemGroup>
+    <None Include="assets\preview\repo-card.png">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <DeploymentContent>true</DeploymentContent>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
     <ProjectReference Include="..\Magpie.Core\Magpie.Core.vcxproj">
       <Project>{0e5205ae-dfa9-4cb8-b662-e43cd6512e2a}</Project>
     </ProjectReference>
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <!-- 导入 Microsoft.AppXPackage.Targets 以生成 pri，应在 Microsoft.Cpp.targets 之后 -->
-  <Import Project="$(MsAppxPackageTargets)" />
+  <Import Project="$(MsAppxPackageTargets)" Condition="Exists('$(MsAppxPackageTargets)')" />
   <!-- 编译为非打包应用时防止引用项目的 winmd 被复制到输出文件夹。 -->
   <!-- 不适用于打包配置，编译系统需要这些 winmd 来解析可激活类。 -->
   <Target Name="RemoveReferenceWinMD" AfterTargets="ResolveAssemblyReferences" Condition="!$(IsPackaged)">
