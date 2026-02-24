@@ -8,7 +8,11 @@
 
 namespace Magpie {
 
-bool DeviceResources::Initialize(bool isForeground) noexcept {
+bool DeviceResources::Initialize(
+	bool isForeground,
+	const GraphicsCardId* graphicsCardIdOverride,
+	std::optional<CaptureMethod> captureMethodOverride
+) noexcept {
 #ifdef _DEBUG
 	UINT flag = DXGI_CREATE_FACTORY_DEBUG;
 #else
@@ -31,7 +35,14 @@ bool DeviceResources::Initialize(bool isForeground) noexcept {
 	_isTearingSupported = supportTearing;
 	Logger::Get().Info(fmt::format("可变刷新率支持: {}", supportTearing ? "是" : "否"));
 
-	if (!_ObtainAdapterAndDevice(ScalingWindow::Get().Options().graphicsCardId, isForeground)) {
+	const GraphicsCardId graphicsCardId = graphicsCardIdOverride
+		? *graphicsCardIdOverride
+		: ScalingWindow::Get().Options().graphicsCardId;
+	const CaptureMethod captureMethod = captureMethodOverride.has_value()
+		? *captureMethodOverride
+		: ScalingWindow::Get().Options().captureMethod;
+
+	if (!_ObtainAdapterAndDevice(graphicsCardId, isForeground, captureMethod)) {
 		Logger::Get().Error("找不到可用的图形适配器");
 		return false;
 	}
@@ -64,7 +75,11 @@ ID3D11SamplerState* DeviceResources::GetSampler(D3D11_FILTER filterMode, D3D11_T
 	return _samMap.emplace(key, std::move(sam)).first->second.get();
 }
 
-bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, bool isForeground) noexcept {
+bool DeviceResources::_ObtainAdapterAndDevice(
+	GraphicsCardId graphicsCardId,
+	bool isForeground,
+	CaptureMethod captureMethod
+) noexcept {
 	winrt::com_ptr<IDXGIAdapter1> adapter;
 	// 记录不支持 FL11 的显卡索引，防止重复尝试
 	int failedIdx = -1;
@@ -79,7 +94,7 @@ bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, boo
 			hr = adapter->GetDesc1(&desc);
 			if (SUCCEEDED(hr)) {
 				if (desc.VendorId == graphicsCardId.vendorId && desc.DeviceId == graphicsCardId.deviceId) {
-					if (_TryCreateD3DDevice(adapter, isForeground)) {
+					if (_TryCreateD3DDevice(adapter, isForeground, captureMethod)) {
 						return true;
 					}
 
@@ -110,7 +125,7 @@ bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, boo
 				}
 
 				if (desc.VendorId == graphicsCardId.vendorId && desc.DeviceId == graphicsCardId.deviceId) {
-					if (_TryCreateD3DDevice(adapter, isForeground)) {
+					if (_TryCreateD3DDevice(adapter, isForeground, captureMethod)) {
 						return true;
 					}
 
@@ -138,7 +153,7 @@ bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, boo
 			continue;
 		}
 
-		if (_TryCreateD3DDevice(adapter, isForeground)) {
+		if (_TryCreateD3DDevice(adapter, isForeground, captureMethod)) {
 			return true;
 		}
 	}
@@ -151,7 +166,7 @@ bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, boo
 		return false;
 	}
 
-	if (!_TryCreateD3DDevice(adapter, isForeground)) {
+	if (!_TryCreateD3DDevice(adapter, isForeground, captureMethod)) {
 		Logger::Get().ComError("创建 WARP 设备失败", hr);
 		return false;
 	}
@@ -159,7 +174,11 @@ bool DeviceResources::_ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, boo
 	return true;
 }
 
-bool DeviceResources::_TryCreateD3DDevice(const winrt::com_ptr<IDXGIAdapter1>& adapter, bool isForeground) noexcept {
+bool DeviceResources::_TryCreateD3DDevice(
+	const winrt::com_ptr<IDXGIAdapter1>& adapter,
+	bool isForeground,
+	CaptureMethod captureMethod
+) noexcept {
 	D3D_FEATURE_LEVEL featureLevels[] = {
 		D3D_FEATURE_LEVEL_11_1,
 		D3D_FEATURE_LEVEL_11_0
@@ -172,7 +191,7 @@ bool DeviceResources::_TryCreateD3DDevice(const winrt::com_ptr<IDXGIAdapter1>& a
 		createDeviceFlags |= D3D11_CREATE_DEVICE_DEBUG;
 	}
 	// WGC 和 D3D11_CREATE_DEVICE_SINGLETHREADED 不兼容
-	if (isForeground || ScalingWindow::Get().Options().captureMethod != CaptureMethod::GraphicsCapture) {
+	if (isForeground || captureMethod != CaptureMethod::GraphicsCapture) {
 		createDeviceFlags |= D3D11_CREATE_DEVICE_SINGLETHREADED;
 	}
 #ifdef MP_USE_COMPSWAPCHAIN

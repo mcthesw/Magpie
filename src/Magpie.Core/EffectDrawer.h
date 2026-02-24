@@ -1,6 +1,7 @@
 #pragma once
 #include "EffectDesc.h"
 #include "SmallVector.h"
+#include <optional>
 // Conan 的 muparser 不含 UNICODE 支持
 #pragma push_macro("_UNICODE")
 #undef _UNICODE
@@ -30,7 +31,9 @@ public:
 		const EffectOption& option,
 		DeviceResources& deviceResources,
 		BackendDescriptorStore& descriptorStore,
-		ID3D11Texture2D** inOutTexture
+		ID3D11Texture2D** inOutTexture,
+		std::optional<SIZE> rendererSizeOverride = std::nullopt,
+		std::optional<bool> isWindowedModeOverride = std::nullopt
 	) noexcept;
 
 	void Draw(EffectsProfiler& profiler) const noexcept;
@@ -41,7 +44,9 @@ public:
 		const EffectDesc& desc,
 		const EffectOption& option,
 		DeviceResources& deviceResources,
-		ID3D11Texture2D** inOutTexture
+		ID3D11Texture2D** inOutTexture,
+		std::optional<SIZE> rendererSizeOverride = std::nullopt,
+		std::optional<bool> isWindowedModeOverride = std::nullopt
 	) noexcept;
 
 	ID3D11Texture2D* GetOutputTexture() const noexcept {
@@ -92,6 +97,9 @@ private:
 	SmallVector<winrt::com_ptr<ID3D11ComputeShader>> _shaders;
 
 	SmallVector<std::pair<uint32_t, uint32_t>> _dispatches;
+
+	std::optional<SIZE> _rendererSizeOverride;
+	std::optional<bool> _isWindowedModeOverride;
 
 	static inline mu::Parser _exprParser;
 };

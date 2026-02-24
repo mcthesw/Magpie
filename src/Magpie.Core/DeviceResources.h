@@ -1,5 +1,6 @@
 #pragma once
 #include "ScalingOptions.h"
+#include <optional>
 #include <parallel_hashmap/phmap.h>
 
 namespace Magpie {
@@ -10,7 +11,11 @@ public:
 	DeviceResources(const DeviceResources&) = delete;
 	DeviceResources(DeviceResources&&) = default;
 
-	bool Initialize(bool isForeground) noexcept;
+	bool Initialize(
+		bool isForeground,
+		const GraphicsCardId* graphicsCardIdOverride = nullptr,
+		std::optional<CaptureMethod> captureMethodOverride = std::nullopt
+	) noexcept;
 
 	IDXGIFactory7* GetDXGIFactory() const noexcept { return _dxgiFactory.get(); }
 	ID3D11Device5* GetD3DDevice() const noexcept { return _d3dDevice.get(); }
@@ -23,8 +28,16 @@ public:
 	ID3D11SamplerState* GetSampler(D3D11_FILTER filterMode, D3D11_TEXTURE_ADDRESS_MODE addressMode) noexcept;
 
 private:
-	bool _ObtainAdapterAndDevice(GraphicsCardId graphicsCardId, bool isForeground) noexcept;
-	bool _TryCreateD3DDevice(const winrt::com_ptr<IDXGIAdapter1>& adapter, bool isForeground) noexcept;
+	bool _ObtainAdapterAndDevice(
+		GraphicsCardId graphicsCardId,
+		bool isForeground,
+		CaptureMethod captureMethod
+	) noexcept;
+	bool _TryCreateD3DDevice(
+		const winrt::com_ptr<IDXGIAdapter1>& adapter,
+		bool isForeground,
+		CaptureMethod captureMethod
+	) noexcept;
 
 	winrt::com_ptr<IDXGIFactory7> _dxgiFactory;
 	winrt::com_ptr<IDXGIAdapter4> _graphicsAdapter;

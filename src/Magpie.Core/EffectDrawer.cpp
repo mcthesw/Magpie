@@ -27,10 +27,14 @@ bool EffectDrawer::Initialize(
 	const EffectOption& option,
 	DeviceResources& deviceResources,
 	BackendDescriptorStore& descriptorStore,
-	ID3D11Texture2D** inOutTexture
+	ID3D11Texture2D** inOutTexture,
+	std::optional<SIZE> rendererSizeOverride,
+	std::optional<bool> isWindowedModeOverride
 ) noexcept {
 	_d3dDC = deviceResources.GetD3DDC();
 	_descriptorStore = &descriptorStore;
+	_rendererSizeOverride = rendererSizeOverride;
+	_isWindowedModeOverride = isWindowedModeOverride;
 
 	SIZE inputSize{};
 	{
@@ -189,8 +193,13 @@ bool EffectDrawer::ResizeTextures(
 	const EffectDesc& desc,
 	const EffectOption& option,
 	DeviceResources& deviceResources,
-	ID3D11Texture2D** inOutTexture
+	ID3D11Texture2D** inOutTexture,
+	std::optional<SIZE> rendererSizeOverride,
+	std::optional<bool> isWindowedModeOverride
 ) noexcept {
+	_rendererSizeOverride = rendererSizeOverride;
+	_isWindowedModeOverride = isWindowedModeOverride;
+
 	bool anyChange = false;
 
 	if (*inOutTexture != _textures[0].get()) {
@@ -309,7 +318,9 @@ SIZE EffectDrawer::_CalcOutputSize(
 	const std::pair<std::string, std::string>& outputSizeExpr = desc.GetOutputSizeExpr();
 
 	if (outputSizeExpr.first.empty()) {
-		const SIZE rendererSize = Win32Helper::GetSizeOfRect(ScalingWindow::Get().RendererRect());
+		const SIZE rendererSize = _rendererSizeOverride.has_value()
+			? *_rendererSizeOverride
+			: Win32Helper::GetSizeOfRect(ScalingWindow::Get().RendererRect());
 
 		switch (option.scalingType) {
 		case ScalingType::Normal:
@@ -330,7 +341,10 @@ SIZE EffectDrawer::_CalcOutputSize(
 			// 可能存在一个像素的误差。考虑长 100 高 50 的矩形窗口，长调整到 101 时高将四舍五入到
 			// 51，再将长调整到 102 高仍是 51，Fit 的计算方式会使这两次调整中有一次存在黑边，而且
 			// 也会影响后续计算是否追加 Bicubic。
-			const bool treatFitAsFill = ScalingWindow::Get().Options().IsWindowedMode() &&
+			const bool isWindowedMode = _isWindowedModeOverride.has_value()
+				? *_isWindowedModeOverride
+				: ScalingWindow::Get().Options().IsWindowedMode();
+			const bool treatFitAsFill = isWindowedMode &&
 				IsApprox(option.scale.first, 1.0f) && IsApprox(option.scale.second, 1.0f);
 
 			if (!treatFitAsFill) {
