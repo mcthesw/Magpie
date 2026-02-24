@@ -1051,6 +1051,27 @@
   <data name="Profile_Advanced_DestAlignment_TopRight.Content" xml:space="preserve">
     <value>Top right</value>
   </data>
+  <data name="Preview.Header" xml:space="preserve">
+    <value>Preview</value>
+  </data>
+  <data name="Preview_Card.Header" xml:space="preserve">
+    <value>Live preview</value>
+  </data>
+  <data name="Preview_Card.Description" xml:space="preserve">
+    <value>Shows the current scaling mode with all configured effects.</value>
+  </data>
+  <data name="Preview_RenderFailed.Text" xml:space="preserve">
+    <value>Preview is unavailable.</value>
+  </data>
+  <data name="Preview_ZoomIn.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom in (Ctrl+Scroll)</value>
+  </data>
+  <data name="Preview_ZoomOut.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Zoom out (Ctrl+Scroll)</value>
+  </data>
+  <data name="Preview_ZoomReset.ToolTipService.ToolTip" xml:space="preserve">
+    <value>Fit to window</value>
+  </data>
   <data name="Home_Advanced_DeveloperOptions_DisableTopmost.Content" xml:space="preserve">
     <value>Disable always-on-top</value>
   </data>

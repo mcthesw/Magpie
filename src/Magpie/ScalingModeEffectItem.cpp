@@ -166,6 +166,7 @@ void ScalingModeEffectItem::ScalingType(int value) {
 	RaisePropertyChanged(L"IsShowScalingPixels");
 
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 bool ScalingModeEffectItem::IsShowScaleFactors() const noexcept {
@@ -210,6 +211,7 @@ void ScalingModeEffectItem::ScaleFactorX(double value) {
 	
 	RaisePropertyChanged(L"ScaleFactorX");
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 double ScalingModeEffectItem::ScaleFactorY() const noexcept {
@@ -236,6 +238,7 @@ void ScalingModeEffectItem::ScaleFactorY(double value) {
 
 	RaisePropertyChanged(L"ScaleFactorY");
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 double ScalingModeEffectItem::ScalingPixelsX() const noexcept {
@@ -262,6 +265,7 @@ void ScalingModeEffectItem::ScalingPixelsX(double value) {
 
 	RaisePropertyChanged(L"ScalingPixelsX");
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 double ScalingModeEffectItem::ScalingPixelsY() const noexcept {
@@ -288,6 +292,7 @@ void ScalingModeEffectItem::ScalingPixelsY(double value) {
 
 	RaisePropertyChanged(L"ScalingPixelsY");
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 void ScalingModeEffectItem::Remove() {

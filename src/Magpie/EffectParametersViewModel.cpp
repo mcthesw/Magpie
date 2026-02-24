@@ -141,6 +141,7 @@ void EffectParametersViewModel::_ScalingModeBoolParameter_PropertyChanged(
 	_Data()[StrHelper::UTF8ToUTF16(effectName)] = (float)boolParamImpl->Value();
 
 	LazySaveAppSettings();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 void EffectParametersViewModel::_ScalingModeFloatParameter_PropertyChanged(
@@ -157,6 +158,7 @@ void EffectParametersViewModel::_ScalingModeFloatParameter_PropertyChanged(
 	_Data()[StrHelper::UTF8ToUTF16(effectName)] = (float)floatParamImpl->Value();
 
 	LazySaveAppSettings();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_scalingModeIdx);
 }
 
 phmap::flat_hash_map<std::wstring, float>& EffectParametersViewModel::_Data() const {

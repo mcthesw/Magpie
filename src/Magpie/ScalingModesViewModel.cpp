@@ -167,6 +167,17 @@ void ScalingModesViewModel::AddScalingMode() {
 	ScalingModesService::Get().AddScalingMode(_newScalingModeName, _newScalingModeCopyFrom - 1);
 }
 
+void ScalingModesViewModel::StopPreviews() noexcept {
+	for (const IInspectable& item : _scalingModes) {
+		winrt::Magpie::ScalingModeItem scalingModeItem = item.try_as<winrt::Magpie::ScalingModeItem>();
+		if (!scalingModeItem) {
+			continue;
+		}
+
+		get_self<ScalingModeItem>(scalingModeItem)->PreviewCollapsed();
+	}
+}
+
 fire_and_forget ScalingModesViewModel::_AddScalingModes(bool isInitialExpanded) {
 	if (_addingScalingModes) {
 		co_return;

@@ -25,6 +25,10 @@ namespace Magpie {
 		
 		IVector<IInspectable> ScalingModes { get; };
 		Int32 ScalingMode;
+		Windows.UI.Xaml.Media.Imaging.SoftwareBitmapSource PreviewImage { get; };
+		Boolean IsPreviewRendering { get; };
+		Boolean IsPreviewError { get; };
+		String PreviewErrorText { get; };
 
 		IVector<IInspectable> CaptureMethods { get; };
 		Int32 CaptureMethod;

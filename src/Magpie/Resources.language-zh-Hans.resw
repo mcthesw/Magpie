@@ -1051,6 +1051,27 @@
   <data name="Profile_Advanced_DestAlignment_TopRight.Content" xml:space="preserve">
     <value>右上角</value>
   </data>
+  <data name="Preview.Header" xml:space="preserve">
+    <value>预览</value>
+  </data>
+  <data name="Preview_Card.Header" xml:space="preserve">
+    <value>实时预览</value>
+  </data>
+  <data name="Preview_Card.Description" xml:space="preserve">
+    <value>展示当前缩放模式及其所有效果的预览。</value>
+  </data>
+  <data name="Preview_RenderFailed.Text" xml:space="preserve">
+    <value>预览不可用。</value>
+  </data>
+  <data name="Preview_ZoomIn.ToolTipService.ToolTip" xml:space="preserve">
+    <value>放大（Ctrl+滚轮）</value>
+  </data>
+  <data name="Preview_ZoomOut.ToolTipService.ToolTip" xml:space="preserve">
+    <value>缩小（Ctrl+滚轮）</value>
+  </data>
+  <data name="Preview_ZoomReset.ToolTipService.ToolTip" xml:space="preserve">
+    <value>适应窗口</value>
+  </data>
   <data name="Home_Advanced_DeveloperOptions_DisableTopmost.Content" xml:space="preserve">
     <value>禁用缩放窗口置顶</value>
   </data>

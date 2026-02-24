@@ -10,7 +10,6 @@
 #include "StrHelper.h"
 #include "Win32Helper.h"
 #include "AppSettings.h"
-#include "Logger.h"
 #include "ScalingMode.h"
 #include "ScalingService.h"
 #include "FileDialogHelper.h"
@@ -18,15 +17,30 @@
 #include "App.h"
 #include "MainWindow.h"
 #include "AdaptersService.h"
+#include "ScalingModesService.h"
+#include "Logger.h"
 
 using namespace ::Magpie;
 using namespace winrt;
+using namespace Windows::Foundation;
 using namespace Windows::Graphics::Display;
 using namespace Windows::Graphics::Imaging;
 using namespace Windows::UI::Xaml::Controls;
 using namespace Windows::UI::Xaml::Media::Imaging;
 
 namespace winrt::Magpie::implementation {
+
+static SIZE _PreviewSizeInPixels(Size sizeInDips, uint32_t dpi) noexcept {
+	if (sizeInDips.Width <= 0 || sizeInDips.Height <= 0) {
+		return {};
+	}
+
+	const float dpiScale = dpi / float(USER_DEFAULT_SCREEN_DPI);
+	return {
+		std::max<LONG>(1, std::lroundf(sizeInDips.Width * dpiScale)),
+		std::max<LONG>(1, std::lroundf(sizeInDips.Height * dpiScale))
+	};
+}
 
 ProfileViewModel::ProfileViewModel(int profileIdx) : _isDefaultProfile(profileIdx < 0) {
 	if (_isDefaultProfile) {
@@ -39,8 +53,6 @@ ProfileViewModel::ProfileViewModel(int profileIdx) : _isDefaultProfile(profileId
 		_icon = FontIcon();
 
 		_appThemeChangedRevoker = App::Get().ThemeChanged(auto_revoke, [this](bool) { _LoadIcon(); });
-		_dpiChangedRevoker = App::Get().MainWindow().DpiChanged(
-			auto_revoke, [this](uint32_t) { _LoadIcon(); });
 
 		if (_data->isPackaged) {
 			AppXReader appxReader;
@@ -54,9 +66,96 @@ ProfileViewModel::ProfileViewModel(int profileIdx) : _isDefaultProfile(profileId
 
 	_adaptersChangedRevoker = AdaptersService::Get().AdaptersChanged(auto_revoke,
 		std::bind_front(&ProfileViewModel::_AdaptersService_AdaptersChanged, this));
+	_scalingModeContentChangedRevoker = ScalingModesService::Get().ScalingModeContentChanged(
+		auto_revoke, std::bind_front(&ProfileViewModel::_ScalingModesService_ContentChanged, this));
+
+	_previewSession = PreviewSession::Create([weakThis = get_weak()]() -> std::optional<PreviewRenderParams> {
+		auto that = weakThis.get();
+		if (!that || !that->_data || that->_data->scalingMode < 0) {
+			return std::nullopt;
+		}
+
+		const uint32_t scalingModeIdx = (uint32_t)that->_data->scalingMode;
+		const ::Magpie::ScalingMode& scalingMode = ScalingModesService::Get().GetScalingMode(scalingModeIdx);
+
+		PreviewRenderParams params;
+		params.effects.reserve(scalingMode.effects.size());
+		for (const ::Magpie::EffectItem& effect : scalingMode.effects) {
+			params.effects.push_back((EffectOption)effect);
+		}
+		params.graphicsCardId = that->_data->graphicsCardId;
+
+		const SIZE renderSize = that->_previewRenderSizeInPixels;
+		if (renderSize.cx <= 0 || renderSize.cy <= 0) {
+			return std::nullopt;
+		}
+		params.renderSize = renderSize;
+
+		const AppSettings& appSettings = AppSettings::Get();
+		params.disableEffectCache = appSettings.IsEffectCacheDisabled();
+		params.disableFP16 = appSettings.IsFP16Disabled();
+		params.inlineParams = appSettings.IsInlineParams();
+
+		return params;
+	});
+	_previewPropertyChangedRevoker = _previewSession->PropertyChanged(auto_revoke,
+		[this](const wchar_t* propertyName) {
+			RaisePropertyChanged(propertyName);
+		});
+	_dpiChangedRevoker = App::Get().MainWindow().DpiChanged(auto_revoke,
+		[this](uint32_t) {
+			if (!_isDefaultProfile) {
+				_LoadIcon();
+			}
+
+			const SIZE newRenderSize = _PreviewSizeInPixels(
+				_previewContainerSizeInDips,
+				App::Get().MainWindow().CurrentDpi()
+			);
+			if (newRenderSize.cx == _previewRenderSizeInPixels.cx &&
+				newRenderSize.cy == _previewRenderSizeInPixels.cy) {
+				return;
+			}
+			_previewRenderSizeInPixels = newRenderSize;
+
+			if (_previewSession) {
+				_previewSession->RequestRefresh(true);
+			}
+		});
+
+	_previewSession->RequestRefresh(true);
 }
 
-ProfileViewModel::~ProfileViewModel() {}
+ProfileViewModel::~ProfileViewModel() {
+	StopPreview();
+}
+
+void ProfileViewModel::StopPreview() noexcept {
+	_dpiChangedRevoker.Revoke();
+	_previewPropertyChangedRevoker.Revoke();
+
+	if (_previewSession) {
+		_previewSession->Cancel();
+		_previewSession.reset();
+	}
+}
+
+void ProfileViewModel::PreviewContainerSizeChanged(
+	IInspectable const&,
+	Windows::UI::Xaml::SizeChangedEventArgs const& args
+) {
+	const Size newSize = args.NewSize();
+	const SIZE newRenderSize = _PreviewSizeInPixels(newSize, App::Get().MainWindow().CurrentDpi());
+	if (_previewRenderSizeInPixels.cx == newRenderSize.cx && _previewRenderSizeInPixels.cy == newRenderSize.cy) {
+		return;
+	}
+
+	_previewContainerSizeInDips = newSize;
+	_previewRenderSizeInPixels = newRenderSize;
+	if (_previewSession) {
+		_previewSession->RequestRefresh();
+	}
+}
 
 bool ProfileViewModel::IsNotDefaultProfile() const noexcept {
 	return !_data->name.empty();
@@ -324,6 +423,9 @@ void ProfileViewModel::ScalingMode(int value) {
 	AppSettings::Get().SaveAsync();
 
 	RaisePropertyChanged(L"ScalingMode");
+	if (_previewSession) {
+		_previewSession->RequestRefresh(true);
+	}
 }
 
 IVector<IInspectable> ProfileViewModel::CaptureMethods() const noexcept {
@@ -539,6 +641,9 @@ void ProfileViewModel::GraphicsCard(int value) {
 	AppSettings::Get().SaveAsync();
 
 	RaisePropertyChanged(L"GraphicsCard");
+	if (_previewSession) {
+		_previewSession->RequestRefresh(true);
+	}
 }
 
 bool ProfileViewModel::IsShowGraphicsCardSettingsCard() const noexcept {
@@ -829,6 +934,16 @@ void ProfileViewModel::IsDirectFlipDisabled(bool value) {
 	RaisePropertyChanged(L"IsDirectFlipDisabled");
 }
 
+void ProfileViewModel::_ScalingModesService_ContentChanged(uint32_t index) {
+	if (!_data || _data->scalingMode < 0 || _data->scalingMode != (int)index) {
+		return;
+	}
+
+	if (_previewSession) {
+		_previewSession->RequestRefresh();
+	}
+}
+
 fire_and_forget ProfileViewModel::_LoadIcon() {
 	std::wstring iconPath;
 	SoftwareBitmap iconBitmap{ nullptr };
@@ -898,6 +1013,10 @@ void ProfileViewModel::_AdaptersService_AdaptersChanged() {
 	RaisePropertyChanged(L"GraphicsCards");
 	RaisePropertyChanged(L"GraphicsCard");
 	_isHandlingAdapterChanged = false;
+
+	if (_previewSession) {
+		_previewSession->RequestRefresh(true);
+	}
 }
 
 }

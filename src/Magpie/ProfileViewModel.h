@@ -1,6 +1,8 @@
 #pragma once
 #include "Event.h"
+#include "PreviewSession.h"
 #include "ProfileViewModel.g.h"
+#include <memory>
 
 namespace Magpie {
 struct Profile;
@@ -12,6 +14,8 @@ struct ProfileViewModel : ProfileViewModelT<ProfileViewModel>,
                           wil::notify_property_changed_base<ProfileViewModel> {
 	ProfileViewModel(int profileIdx);
 	~ProfileViewModel();
+
+	void StopPreview() noexcept;
 
 	IconElement Icon() const noexcept {
 		return _icon;
@@ -59,6 +63,22 @@ struct ProfileViewModel : ProfileViewModelT<ProfileViewModel>,
 
 	int ScalingMode() const noexcept;
 	void ScalingMode(int value);
+
+	Windows::UI::Xaml::Media::Imaging::SoftwareBitmapSource PreviewImage() const noexcept {
+		return _previewSession ? _previewSession->Image() : nullptr;
+	}
+
+	bool IsPreviewRendering() const noexcept {
+		return _previewSession && _previewSession->IsRendering();
+	}
+
+	bool IsPreviewError() const noexcept {
+		return _previewSession && _previewSession->IsError();
+	}
+
+	hstring PreviewErrorText() const noexcept {
+		return _previewSession ? _previewSession->ErrorText() : hstring();
+	}
 
 	IVector<IInspectable> CaptureMethods() const noexcept;
 
@@ -148,10 +168,16 @@ struct ProfileViewModel : ProfileViewModelT<ProfileViewModel>,
 	bool IsDirectFlipDisabled() const noexcept;
 	void IsDirectFlipDisabled(bool value);
 
+	void PreviewContainerSizeChanged(
+		IInspectable const&,
+		Windows::UI::Xaml::SizeChangedEventArgs const& args
+	);
+
 private:
 	fire_and_forget _LoadIcon();
 
 	void _AdaptersService_AdaptersChanged();
+	void _ScalingModesService_ContentChanged(uint32_t index);
 
 	bool _isProgramExist = true;
 
@@ -165,8 +191,13 @@ private:
 	::Magpie::MultithreadEvent<bool>::EventRevoker _appThemeChangedRevoker;
 	::Magpie::Event<uint32_t>::EventRevoker _dpiChangedRevoker;
 	::Magpie::Event<>::EventRevoker _adaptersChangedRevoker;
+	::Magpie::Event<uint32_t>::EventRevoker _scalingModeContentChangedRevoker;
+	::Magpie::Event<const wchar_t*>::EventRevoker _previewPropertyChangedRevoker;
 
 	IconElement _icon{ nullptr };
+	std::shared_ptr<::Magpie::PreviewSession> _previewSession;
+	Windows::Foundation::Size _previewContainerSizeInDips{};
+	SIZE _previewRenderSizeInPixels{};
 
 	const bool _isDefaultProfile = true;
 	bool _isRenameConfirmButtonEnabled = false;

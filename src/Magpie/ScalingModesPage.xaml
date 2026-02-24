@@ -119,6 +119,8 @@
 					<DataTemplate x:DataType="local:ScalingModeItem">
 						<local:SettingsExpander Description="{x:Bind Description, Mode=OneWay}"
 						                        Header="{x:Bind Name, Mode=OneWay}"
+						                        Collapsed="{x:Bind PreviewCollapsed}"
+						                        Expanded="{x:Bind PreviewExpanded}"
 						                        IsExpanded="{x:Bind IsInitialExpanded, Mode=OneTime}">
 							<local:SimpleStackPanel Orientation="Horizontal"
 							                        Spacing="4">
@@ -455,14 +457,99 @@
 								</ListView>
 							</local:SettingsExpander.Items>
 							<local:SettingsExpander.ItemsHeader>
-								<muxc:InfoBar x:Uid="ScalingModes_HasUnkownEffects"
-								              MinHeight="0"
-								              Margin="0,0,0,-4"
-								              BorderThickness="0,0,0,0"
-								              CornerRadius="0"
-								              IsClosable="False"
-								              IsOpen="{x:Bind HasUnkownEffects, Mode=OneWay}"
-								              Severity="Warning" />
+								<local:SimpleStackPanel Margin="0,0,0,-4"
+								                        Spacing="2">
+									<local:SettingsCard x:Uid="Preview_Card"
+								                    HorizontalContentAlignment="Stretch"
+								                    IsWrapEnabled="True"
+								                    Style="{StaticResource DefaultSettingsExpanderItemStyle}">
+									<local:SettingsCard.HeaderIcon>
+										<FontIcon Glyph="&#xE91B;" />
+									</local:SettingsCard.HeaderIcon>
+									<Grid Height="300"
+									      MinWidth="320"
+										      SizeChanged="PreviewContainer_SizeChanged">
+											<Border Background="{ThemeResource LayerFillColorDefaultBrush}"
+											        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+											        BorderThickness="1"
+											        CornerRadius="4" />
+											<ScrollViewer Margin="8"
+											              ZoomMode="Enabled"
+										              HorizontalScrollMode="Disabled"
+										              VerticalScrollMode="Disabled"
+										              HorizontalScrollBarVisibility="Hidden"
+										              VerticalScrollBarVisibility="Hidden"
+											              MinZoomFactor="1"
+											              MaxZoomFactor="8"
+											              PointerPressed="PreviewScrollViewer_PointerPressed"
+											              PointerMoved="PreviewScrollViewer_PointerMoved"
+											              PointerReleased="PreviewScrollViewer_PointerReleased"
+											              PointerCanceled="PreviewScrollViewer_PointerCanceled"
+											              PointerCaptureLost="PreviewScrollViewer_PointerCaptureLost"
+											              PointerWheelChanged="PreviewScrollViewer_PointerWheelChanged"
+											              SizeChanged="PreviewScrollViewer_SizeChanged">
+												<Image Source="{x:Bind PreviewImage, Mode=OneWay}"
+												       Stretch="Uniform"
+												       HorizontalAlignment="Center"
+												       VerticalAlignment="Center" />
+											</ScrollViewer>
+											<muxc:ProgressRing x:Name="PreviewProgressRing"
+											                   Width="24"
+											                   Height="24"
+											                   x:Load="{x:Bind IsPreviewRendering, Mode=OneWay}"
+											                   HorizontalAlignment="Center"
+											                   VerticalAlignment="Center"
+											                   IsActive="True" />
+											<Border x:Name="PreviewErrorPanel"
+											        HorizontalAlignment="Stretch"
+											        VerticalAlignment="Bottom"
+											        x:Load="{x:Bind IsPreviewError, Mode=OneWay}"
+											        Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+											        CornerRadius="0,0,4,4">
+												<local:SimpleStackPanel Margin="12,8"
+												                        Spacing="4">
+													<TextBlock x:Uid="Preview_RenderFailed"
+													           FontWeight="SemiBold" />
+													<TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+													           Text="{x:Bind PreviewErrorText, Mode=OneWay}"
+													           TextWrapping="WrapWholeWords" />
+												</local:SimpleStackPanel>
+											</Border>
+											<StackPanel HorizontalAlignment="Right"
+											            VerticalAlignment="Bottom"
+											            Margin="0,0,12,12"
+											            Orientation="Horizontal"
+											            Spacing="2">
+												<StackPanel.Resources>
+													<Style BasedOn="{StaticResource DefaultButtonStyle}"
+													       TargetType="Button">
+														<Setter Property="Width" Value="28" />
+														<Setter Property="Height" Value="28" />
+														<Setter Property="Padding" Value="0" />
+														<Setter Property="CornerRadius" Value="4" />
+														<Setter Property="Background"
+														        Value="{ThemeResource AcrylicInAppFillColorDefaultBrush}" />
+													</Style>
+													<Style TargetType="FontIcon">
+														<Setter Property="FontSize" Value="12" />
+													</Style>
+												</StackPanel.Resources>
+												<Button x:Uid="Preview_ZoomReset"
+												        Click="ZoomResetButton_Click">
+													<FontIcon Glyph="&#xE9A6;" />
+												</Button>
+											</StackPanel>
+										</Grid>
+									</local:SettingsCard>
+									<muxc:InfoBar x:Uid="ScalingModes_HasUnkownEffects"
+									              MinHeight="0"
+									              Margin="0,0,0,-4"
+									              BorderThickness="0,0,0,0"
+									              CornerRadius="0"
+									              IsClosable="False"
+									              IsOpen="{x:Bind HasUnkownEffects, Mode=OneWay}"
+									              Severity="Warning" />
+								</local:SimpleStackPanel>
 							</local:SettingsExpander.ItemsHeader>
 							<local:SettingsExpander.ItemsFooter>
 								<local:SettingsCard Style="{StaticResource DefaultSettingsExpanderItemStyle}">

@@ -1,7 +1,9 @@
 #pragma once
 #include "ScalingModeItem.g.h"
 #include "Event.h"
+#include "PreviewSession.h"
 #include "ScalingModesService.h"
+#include <memory>
 
 namespace Magpie {
 struct ScalingMode;
@@ -14,6 +16,7 @@ struct ScalingModeEffectItem;
 struct ScalingModeItem : ScalingModeItemT<ScalingModeItem>,
                          wil::notify_property_changed_base<ScalingModeItem> {
 	ScalingModeItem(uint32_t index, bool isInitialExpanded);
+	~ScalingModeItem();
 
 	void AddEffect(const hstring& fullName);
 
@@ -65,6 +68,33 @@ struct ScalingModeItem : ScalingModeItemT<ScalingModeItem>,
 
 	bool IsShowMoveButtons() const noexcept;
 
+	Windows::UI::Xaml::Media::Imaging::SoftwareBitmapSource PreviewImage() const noexcept {
+		return _previewSession ? _previewSession->Image() : nullptr;
+	}
+
+	bool IsPreviewRendering() const noexcept {
+		return _previewSession && _previewSession->IsRendering();
+	}
+
+	bool IsPreviewError() const noexcept {
+		return _previewSession && _previewSession->IsError();
+	}
+
+	hstring PreviewErrorText() const noexcept {
+		return _previewSession ? _previewSession->ErrorText() : hstring();
+	}
+
+	void PreviewExpanded();
+
+	void PreviewCollapsed();
+
+	void RequestPreviewRefresh(bool immediate = false);
+
+	void PreviewContainerSizeChanged(
+		IInspectable const&,
+		Windows::UI::Xaml::SizeChangedEventArgs const& args
+	);
+
 	void Remove();
 
 	IVector<IInspectable> LinkedProfiles() const noexcept {
@@ -86,6 +116,8 @@ private:
 
 	void _ScalingModesService_Removed(uint32_t index);
 
+	void _ScalingModesService_ContentChanged(uint32_t index);
+
 	void _Effects_VectorChanged(IObservableVector<IInspectable> const&, IVectorChangedEventArgs const& args);
 
 	void _ScalingModeEffectItem_Removed(uint32_t index);
@@ -93,6 +125,8 @@ private:
 	void _ScalingModeEffectItem_Moved(ScalingModeEffectItem& sender, bool isUp);
 
 	com_ptr<ScalingModeEffectItem> _CreateScalingModeEffectItem(uint32_t scalingModeIdx, uint32_t effectIdx);
+
+	void _EnsurePreviewSession();
 
 	::Magpie::ScalingMode& _Data() noexcept;
 	const ::Magpie::ScalingMode& _Data() const noexcept;
@@ -105,16 +139,23 @@ private:
 	::Magpie::Event<::Magpie::EffectAddedWay>::EventRevoker _scalingModeAddedRevoker;
 	::Magpie::Event<uint32_t, bool>::EventRevoker _scalingModeMovedRevoker;
 	::Magpie::Event<uint32_t>::EventRevoker _scalingModeRemovedRevoker;
+	::Magpie::Event<uint32_t>::EventRevoker _scalingModeContentChangedRevoker;
+	::Magpie::Event<uint32_t>::EventRevoker _dpiChangedRevoker;
+	::Magpie::Event<const wchar_t*>::EventRevoker _previewPropertyChangedRevoker;
 	IObservableVector<IInspectable>::VectorChanged_revoker _effectsChangedRevoker;
 
 	hstring _renameText;
 	std::wstring_view _trimedRenameText;
 	
 	IVector<IInspectable> _linkedProfiles{ nullptr };
+	std::shared_ptr<::Magpie::PreviewSession> _previewSession;
+	Windows::Foundation::Size _previewContainerSizeInDips{};
+	SIZE _previewRenderSizeInPixels{};
 
 	bool _isMovingEffects = true;
 	bool _isRenameButtonEnabled = false;
 	bool _isInitialExpanded = false;
+	bool _isPreviewActive = false;
 };
 
 }

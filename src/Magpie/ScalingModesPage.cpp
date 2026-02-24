@@ -6,6 +6,7 @@
 #include "ControlHelper.h"
 #include "EffectsService.h"
 #include <parallel_hashmap/phmap.h>
+#include <winrt/Windows.UI.Input.h>
 
 using namespace ::Magpie;
 using namespace winrt;
@@ -14,8 +15,49 @@ using namespace Windows::UI::Xaml::Input;
 
 namespace winrt::Magpie::implementation {
 
+namespace Controls = Windows::UI::Xaml::Controls;
+namespace Media = Windows::UI::Xaml::Media;
+
+static constexpr float WHEEL_ZOOM_STEP = 1.12f;
+
+static double ClampOffset(double value, double maxOffset) noexcept {
+	return std::min(std::max(value, 0.0), std::max(maxOffset, 0.0));
+}
+
+static Controls::ScrollViewer FindPreviewScrollViewer(DependencyObject const& element) noexcept {
+	DependencyObject current = Media::VisualTreeHelper::GetParent(element);
+	while (current) {
+		auto panel = current.try_as<Controls::Panel>();
+		if (panel) {
+			for (UIElement const& child : panel.Children()) {
+				auto sv = child.try_as<Controls::ScrollViewer>();
+				if (sv) {
+					return sv;
+				}
+			}
+		}
+
+		current = Media::VisualTreeHelper::GetParent(current);
+	}
+
+	return nullptr;
+}
+
 ScalingModesPage::ScalingModesPage() {
 	_BuildEffectMenu();
+}
+
+void ScalingModesPage::OnNavigatedFrom(Navigation::NavigationEventArgs const&) {
+	if (_activePreviewDragScrollViewer) {
+		_activePreviewDragScrollViewer.ReleasePointerCaptures();
+	}
+	_activePreviewDragScrollViewer = nullptr;
+	_isPreviewDragging = false;
+	_previewDragPointerId = 0;
+
+	if (_viewModel) {
+		_viewModel->StopPreviews();
+	}
 }
 
 void ScalingModesPage::ComboBox_DropDownOpened(IInspectable const& sender, IInspectable const&) {
@@ -28,6 +70,196 @@ void ScalingModesPage::NumberBox_Loaded(IInspectable const& sender, RoutedEventA
 
 void ScalingModesPage::EffectSettingsCard_Loaded(IInspectable const& sender, RoutedEventArgs const&) {
 	XamlHelper::UpdateThemeOfTooltips(sender.try_as<DependencyObject>(), ActualTheme());
+}
+
+void ScalingModesPage::PreviewContainer_SizeChanged(
+	IInspectable const& sender,
+	Windows::UI::Xaml::SizeChangedEventArgs const& args
+) {
+	FrameworkElement element = sender.try_as<FrameworkElement>();
+	if (!element) {
+		return;
+	}
+
+	winrt::Magpie::ScalingModeItem item = element.DataContext().try_as<winrt::Magpie::ScalingModeItem>();
+	if (!item) {
+		return;
+	}
+
+	get_self<ScalingModeItem>(item)->PreviewContainerSizeChanged(sender, args);
+}
+
+void ScalingModesPage::PreviewScrollViewer_SizeChanged(
+	IInspectable const& sender,
+	Windows::UI::Xaml::SizeChangedEventArgs const&
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv) {
+		return;
+	}
+
+	auto image = sv.Content().try_as<Controls::Image>();
+	if (!image) {
+		return;
+	}
+
+	const double vw = sv.ViewportWidth();
+	const double vh = sv.ViewportHeight();
+	if (vw > 0 && vh > 0) {
+		image.Width(vw);
+		image.Height(vh);
+	}
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerPressed(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const& args
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv) {
+		return;
+	}
+
+	auto point = args.GetCurrentPoint(sv);
+	if (!point.Properties().IsLeftButtonPressed()) {
+		return;
+	}
+
+	_activePreviewDragScrollViewer = sv;
+	_isPreviewDragging = true;
+	_previewDragPointerId = point.PointerId();
+	_previewLastPointerPos = point.Position();
+	sv.CapturePointer(args.Pointer());
+	args.Handled(true);
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerMoved(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const& args
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv || !_isPreviewDragging || sv != _activePreviewDragScrollViewer) {
+		return;
+	}
+
+	auto point = args.GetCurrentPoint(sv);
+	if (point.PointerId() != _previewDragPointerId) {
+		return;
+	}
+
+	Windows::Foundation::Point curPos = point.Position();
+	double dx = curPos.X - _previewLastPointerPos.X;
+	double dy = curPos.Y - _previewLastPointerPos.Y;
+	double newX = ClampOffset(sv.HorizontalOffset() - dx, sv.ScrollableWidth());
+	double newY = ClampOffset(sv.VerticalOffset() - dy, sv.ScrollableHeight());
+
+	sv.ChangeView(
+		newX,
+		newY,
+		nullptr,
+		true  // disable animation for immediate 1:1 tracking
+	);
+
+	_previewLastPointerPos = curPos;
+	args.Handled(true);
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerReleased(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const& args
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv || !_isPreviewDragging || sv != _activePreviewDragScrollViewer) {
+		return;
+	}
+
+	auto point = args.GetCurrentPoint(sv);
+	if (point.PointerId() != _previewDragPointerId) {
+		return;
+	}
+
+	_activePreviewDragScrollViewer = nullptr;
+	_isPreviewDragging = false;
+	_previewDragPointerId = 0;
+	args.Handled(true);
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerCanceled(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const& args
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv || !_isPreviewDragging || sv != _activePreviewDragScrollViewer) {
+		return;
+	}
+
+	auto point = args.GetCurrentPoint(sv);
+	if (point.PointerId() != _previewDragPointerId) {
+		return;
+	}
+
+	_activePreviewDragScrollViewer = nullptr;
+	_isPreviewDragging = false;
+	_previewDragPointerId = 0;
+	args.Handled(true);
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerCaptureLost(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const&
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv || !_isPreviewDragging || sv != _activePreviewDragScrollViewer) {
+		return;
+	}
+
+	_activePreviewDragScrollViewer = nullptr;
+	_isPreviewDragging = false;
+	_previewDragPointerId = 0;
+}
+
+void ScalingModesPage::PreviewScrollViewer_PointerWheelChanged(
+	IInspectable const& sender,
+	PointerRoutedEventArgs const& args
+) {
+	auto sv = sender.try_as<Controls::ScrollViewer>();
+	if (!sv) {
+		return;
+	}
+
+	auto point = args.GetCurrentPoint(sv);
+	int32_t delta = point.Properties().MouseWheelDelta();
+	if (!delta) {
+		return;
+	}
+
+	const auto pos = point.Position();
+	double z = sv.ZoomFactor();
+	float newZoom = static_cast<float>(z) * (delta > 0 ? WHEEL_ZOOM_STEP : 1.0f / WHEEL_ZOOM_STEP);
+	newZoom = std::min(std::max(newZoom, sv.MinZoomFactor()), sv.MaxZoomFactor());
+	double z2 = newZoom;
+
+	double ox = sv.HorizontalOffset();
+	double oy = sv.VerticalOffset();
+	double cx = (ox + pos.X) / z;
+	double cy = (oy + pos.Y) / z;
+
+	double ox2 = cx * z2 - pos.X;
+	double oy2 = cy * z2 - pos.Y;
+	ox2 = ClampOffset(ox2, sv.ScrollableWidth());
+	oy2 = ClampOffset(oy2, sv.ScrollableHeight());
+
+	sv.ChangeView(ox2, oy2, newZoom, true);
+	args.Handled(true);
+}
+
+void ScalingModesPage::ZoomResetButton_Click(IInspectable const& sender, RoutedEventArgs const&) {
+	auto sv = FindPreviewScrollViewer(sender.try_as<DependencyObject>());
+	if (!sv) {
+		return;
+	}
+
+	sv.ChangeView(0.0, 0.0, 1.0f);
 }
 
 void ScalingModesPage::AddEffectButton_Click(IInspectable const& sender, RoutedEventArgs const&) {

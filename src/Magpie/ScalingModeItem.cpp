@@ -11,13 +11,27 @@
 #include "EffectHelper.h"
 #include "CommonSharedConstants.h"
 #include "App.h"
+#include "MainWindow.h"
 #include "ScalingModeEffectItem.h"
 #include "Win32Helper.h"
 #include "RootPage.h"
+#include "PreviewSession.h"
 
 using namespace ::Magpie;
 
 namespace winrt::Magpie::implementation {
+
+static SIZE _PreviewSizeInPixels(Windows::Foundation::Size sizeInDips, uint32_t dpi) noexcept {
+	if (sizeInDips.Width <= 0 || sizeInDips.Height <= 0) {
+		return {};
+	}
+
+	const float dpiScale = dpi / float(USER_DEFAULT_SCREEN_DPI);
+	return {
+		std::max<LONG>(1, std::lroundf(sizeInDips.Width * dpiScale)),
+		std::max<LONG>(1, std::lroundf(sizeInDips.Height * dpiScale))
+	};
+}
 
 static ScalingModeEffectItem& GetEffectItemImpl(const IInspectable& item) noexcept {
 	return *get_self<ScalingModeEffectItem>(item.try_as<winrt::Magpie::ScalingModeEffectItem>());
@@ -48,6 +62,8 @@ ScalingModeItem::ScalingModeItem(uint32_t index, bool isInitialExpanded)
 		auto_revoke, std::bind_front(&ScalingModeItem::_ScalingModesService_Moved, this));
 	_scalingModeRemovedRevoker = ScalingModesService::Get().ScalingModeRemoved(
 		auto_revoke, std::bind_front(&ScalingModeItem::_ScalingModesService_Removed, this));
+	_scalingModeContentChangedRevoker = ScalingModesService::Get().ScalingModeContentChanged(
+		auto_revoke, std::bind_front(&ScalingModeItem::_ScalingModesService_ContentChanged, this));
 
 	ScalingMode& data = _Data();
 	{
@@ -60,6 +76,15 @@ ScalingModeItem::ScalingModeItem(uint32_t index, bool isInitialExpanded)
 	}
 	_effectsChangedRevoker = _effects.VectorChanged(
 		auto_revoke, { this, &ScalingModeItem::_Effects_VectorChanged });
+
+	if (_isInitialExpanded) {
+		_isPreviewActive = true;
+		RequestPreviewRefresh(true);
+	}
+}
+
+ScalingModeItem::~ScalingModeItem() {
+	PreviewCollapsed();
 }
 
 void ScalingModeItem::_Index(uint32_t value) noexcept {
@@ -71,6 +96,9 @@ void ScalingModeItem::_Index(uint32_t value) noexcept {
 	if (!_IsRemoved()) {
 		RaisePropertyChanged(L"CanMoveUp");
 		RaisePropertyChanged(L"CanMoveDown");
+		if (_isPreviewActive) {
+			RequestPreviewRefresh(true);
+		}
 	}
 }
 
@@ -103,6 +131,14 @@ void ScalingModeItem::_ScalingModesService_Removed(uint32_t index) {
 		RaisePropertyChanged(L"CanMoveUp");
 		RaisePropertyChanged(L"CanMoveDown");
 	}
+}
+
+void ScalingModeItem::_ScalingModesService_ContentChanged(uint32_t index) {
+	if (_IsRemoved() || !_isPreviewActive || _index != index) {
+		return;
+	}
+
+	RequestPreviewRefresh();
 }
 
 void ScalingModeItem::_Effects_VectorChanged(IObservableVector<IInspectable> const&, IVectorChangedEventArgs const& args) {
@@ -142,6 +178,7 @@ void ScalingModeItem::_Effects_VectorChanged(IObservableVector<IInspectable> con
 
 	RaisePropertyChanged(L"Description");
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_index);
 }
 
 void ScalingModeItem::_ScalingModeEffectItem_Removed(uint32_t index) {
@@ -172,6 +209,7 @@ void ScalingModeItem::_ScalingModeEffectItem_Removed(uint32_t index) {
 	RaisePropertyChanged(L"HasUnkownEffects");
 
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_index);
 }
 
 void ScalingModeItem::_ScalingModeEffectItem_Moved(ScalingModeEffectItem& sender, bool isUp) {
@@ -234,6 +272,7 @@ void ScalingModeItem::AddEffect(const hstring& fullName) {
 	}
 
 	AppSettings::Get().SaveAsync();
+	ScalingModesService::Get().NotifyScalingModeContentChanged(_index);
 }
 
 hstring ScalingModeItem::Name() const noexcept {
@@ -390,6 +429,106 @@ bool ScalingModeItem::IsShowMoveButtons() const noexcept {
 	return _effects.Size() > 1 && Win32Helper::IsProcessElevated();
 }
 
+void ScalingModeItem::PreviewExpanded() {
+	if (_IsRemoved()) {
+		return;
+	}
+
+	_isPreviewActive = true;
+	_EnsurePreviewSession();
+	RequestPreviewRefresh(true);
+}
+
+void ScalingModeItem::PreviewCollapsed() {
+	_isPreviewActive = false;
+	if (_previewSession) {
+		_previewSession->Cancel();
+		_dpiChangedRevoker.Revoke();
+		_previewPropertyChangedRevoker.Revoke();
+		_previewSession.reset();
+	}
+}
+
+void ScalingModeItem::RequestPreviewRefresh(bool immediate) {
+	if (_IsRemoved() || !_isPreviewActive) {
+		return;
+	}
+
+	_EnsurePreviewSession();
+	_previewSession->RequestRefresh(immediate);
+}
+
+void ScalingModeItem::PreviewContainerSizeChanged(
+	IInspectable const&,
+	Windows::UI::Xaml::SizeChangedEventArgs const& args
+) {
+	const Windows::Foundation::Size newSize = args.NewSize();
+	const SIZE newRenderSize = _PreviewSizeInPixels(newSize, App::Get().MainWindow().CurrentDpi());
+	if (_previewRenderSizeInPixels.cx == newRenderSize.cx && _previewRenderSizeInPixels.cy == newRenderSize.cy) {
+		return;
+	}
+
+	_previewContainerSizeInDips = newSize;
+	_previewRenderSizeInPixels = newRenderSize;
+	if (_isPreviewActive && _previewSession) {
+		_previewSession->RequestRefresh();
+	}
+}
+
+void ScalingModeItem::_EnsurePreviewSession() {
+	if (_previewSession) {
+		return;
+	}
+
+	_previewSession = PreviewSession::Create([weakThis = get_weak()]() -> std::optional<PreviewRenderParams> {
+		auto that = weakThis.get();
+		if (!that || that->_IsRemoved() || !that->_isPreviewActive) {
+			return std::nullopt;
+		}
+
+		const ScalingMode& scalingMode = that->_Data();
+		PreviewRenderParams params;
+		params.effects.reserve(scalingMode.effects.size());
+		for (const EffectItem& effect : scalingMode.effects) {
+			params.effects.push_back((EffectOption)effect);
+		}
+
+		const SIZE renderSize = that->_previewRenderSizeInPixels;
+		if (renderSize.cx <= 0 || renderSize.cy <= 0) {
+			return std::nullopt;
+		}
+		params.renderSize = renderSize;
+
+		const AppSettings& appSettings = AppSettings::Get();
+		params.disableEffectCache = appSettings.IsEffectCacheDisabled();
+		params.disableFP16 = appSettings.IsFP16Disabled();
+		params.inlineParams = appSettings.IsInlineParams();
+
+		return params;
+	});
+
+	_previewPropertyChangedRevoker = _previewSession->PropertyChanged(auto_revoke,
+		[this](const wchar_t* propertyName) {
+			RaisePropertyChanged(propertyName);
+		});
+	_dpiChangedRevoker = App::Get().MainWindow().DpiChanged(auto_revoke,
+		[this](uint32_t) {
+			const SIZE newRenderSize = _PreviewSizeInPixels(
+				_previewContainerSizeInDips,
+				App::Get().MainWindow().CurrentDpi()
+			);
+			if (newRenderSize.cx == _previewRenderSizeInPixels.cx &&
+				newRenderSize.cy == _previewRenderSizeInPixels.cy) {
+				return;
+			}
+			_previewRenderSizeInPixels = newRenderSize;
+
+			if (_isPreviewActive && _previewSession) {
+				_previewSession->RequestRefresh(true);
+			}
+		});
+}
+
 void ScalingModeItem::Remove() {
 	if (_IsRemoved()) {
 		return;
@@ -400,6 +539,13 @@ void ScalingModeItem::Remove() {
 	_scalingModeAddedRevoker.Revoke();
 	_scalingModeMovedRevoker.Revoke();
 	_scalingModeRemovedRevoker.Revoke();
+	_scalingModeContentChangedRevoker.Revoke();
+	_dpiChangedRevoker.Revoke();
+	_previewPropertyChangedRevoker.Revoke();
+	if (_previewSession) {
+		_previewSession->Cancel();
+		_previewSession.reset();
+	}
 
 	ScalingModesService::Get().RemoveScalingMode(_index);
 

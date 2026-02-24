@@ -27,5 +27,12 @@ namespace Magpie {
 
         Boolean CanReorderEffects { get; };
         Boolean IsShowMoveButtons { get; };
+        void PreviewExpanded();
+        void PreviewCollapsed();
+
+        Windows.UI.Xaml.Media.Imaging.SoftwareBitmapSource PreviewImage { get; };
+        Boolean IsPreviewRendering { get; };
+        Boolean IsPreviewError { get; };
+        String PreviewErrorText { get; };
     }
 }

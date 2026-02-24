@@ -89,6 +89,14 @@ bool ScalingModesService::MoveScalingMode(uint32_t scalingModeIdx, bool isMoveUp
 	return true;
 }
 
+void ScalingModesService::NotifyScalingModeContentChanged(uint32_t scalingModeIdx) noexcept {
+	if (scalingModeIdx >= GetScalingModeCount()) {
+		return;
+	}
+
+	ScalingModeContentChanged.Invoke(scalingModeIdx);
+}
+
 static void WriteScalingMode(rapidjson::PrettyWriter<rapidjson::StringBuffer>& writer, const ScalingMode& scaleMode) {
 	writer.StartObject();
 	writer.Key("name");

@@ -33,6 +33,8 @@ public:
 
 	bool MoveScalingMode(uint32_t scalingModeIdx, bool isMoveUp);
 
+	void NotifyScalingModeContentChanged(uint32_t scalingModeIdx) noexcept;
+
 	// 不能使用 rapidjson::Writer 类型，因为 PrettyWriter 没有重写 Writer 中的方法
 	// 不合理的 API 设计
 	void Export(rapidjson::PrettyWriter<rapidjson::StringBuffer>& writer) const noexcept;
@@ -42,6 +44,7 @@ public:
 	Event<EffectAddedWay> ScalingModeAdded;
 	Event<uint32_t> ScalingModeRemoved;
 	Event<uint32_t, bool> ScalingModeMoved;
+	Event<uint32_t> ScalingModeContentChanged;
 
 private:
 	ScalingModesService() = default;
